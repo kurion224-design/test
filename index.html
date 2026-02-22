@@ -1,2 +1,12 @@
 <h1>Hello Netlify!</h1>
 <p>これはテストページです。</p>
+
+<button onclick="callGAS()">送信</button>
+
+<script>
+async function callGAS() {
+  const res = await fetch("https://script.google.com/macros/s/AKfycbyKaX9uuLHL7Z2c59ShbnNvzo2jjQ8HUuYuILjS5mxYAHxyEWJzvtmi7YovshMor1UZ7Q/exec");
+  const text = await res.text();
+  console.log(text);
+}
+</script>
