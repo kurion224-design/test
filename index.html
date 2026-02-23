@@ -1,14 +1,29 @@
-<h1>Hello Netlify!</h1>
-<p>これはテストページです。</p>
+<h1>Drive アップロードテスト</h1>
+<p>画像を選んでアップロードできます。</p>
 
-<button onclick="callGAS()">送信</button>
+<input type="file" id="fileInput">
+<button onclick="upload()">アップロード</button>
 
 <p id="result"></p>
 
 <script>
-async function callGAS() {
-  const res = await fetch("https://script.google.com/macros/s/AKfycbyKaX9uuLHL7Z2c59ShbnNvzo2jjQ8HUuYuILjS5mxYAHxyEWJzvtmi7YovshMor1UZ7Q/exec");
+async function upload() {
+  const file = document.getElementById("fileInput").files[0];
+  if (!file) {
+    document.getElementById("result").innerText = "ファイルを選んでください";
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch("★ここにGASのURL★", {
+    method: "POST",
+    body: formData
+  });
+
   const text = await res.text();
   document.getElementById("result").innerText = text;
 }
 </script>
+
