@@ -17,10 +17,10 @@ async function upload() {
   const formData = new FormData();
   formData.append("file", file);
 
-  const res = await fetch("★ここにGASのURL★", {
-    method: "POST",
-    body: formData
-  });
+const res = await fetch("https://script.google.com/macros/s/AKfycbyKaX9uuLHL7Z2c59ShbnNvzo2jjQ8HUuYuILjS5mxYAHxyEWJzvtmi7YovshMor1UZ7Q/exec", {
+  method: "POST",
+  body: formData
+});
 
   const text = await res.text();
   document.getElementById("result").innerText = text;
