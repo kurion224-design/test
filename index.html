@@ -1,30 +1,257 @@
-<h1>Drive アップロードテスト</h1>
-<p>画像を選んでアップロードできます。</p>
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="lock.js"></script>
+<!-- アイコンフォント -->
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+<title>リーグ戦 画像アップロード</title>
 
-<input type="file" id="fileInput">
-<button onclick="upload()">アップロード</button>
+</head>
+<body>
 
-<p id="result"></p>
+  <h1><span class="material-icons-round">add_a_photo</span> リーグ戦 画像アップロード</h1>
+
+  <div class="card">
+
+
+    <div class="file-area" onclick="document.getElementById('files').click()">
+      <span class="material-icons-round" style="font-size:3rem; margin-bottom:10px; color:var(--muted);">folder_open</span>
+      <div style="font-weight:bold; margin-bottom:4px;">ここをタップして画像を選ぶ</div>
+      <div style="font-size:0.8rem; opacity:0.7;">（複数枚まとめて選べます）</div>
+      
+      <input type="file" id="files" multiple accept="image/*" style="display:none;">
+      <div id="fileCount" style="margin-top:10px; font-weight:bold; color:var(--current-accent);"></div>
+    </div>
+
+    <button id="uploadBtn" disabled>卓と回戦を選んでください</button>
+  </div>
+
+  <div id="log">
+    <div style="text-align:center; color:#ccc;">ここに進捗が表示されます...</div>
+  </div>
+
+  <a href="./list.html" class="back-link">
+    <span class="material-icons-round" style="vertical-align:middle;">arrow_back</span>
+    ノート一覧に戻る
+  </a>
 
 <script>
-async function upload() {
-  const file = document.getElementById("fileInput").files[0];
-  if (!file) {
-    document.getElementById("result").innerText = "ファイルを選んでください";
-    return;
+// ====== 設定 ======
+const GAS_EXEC_URL = "https://script.google.com/macros/s/AKfycbyY6YFOpeJs4-5JFkvu8581x69HXWL3Kyf4ijRof1b6JbYHiF8wpY_nK-8IM2FI9UxG/exec";
+
+// 圧縮設定
+const COMPRESS_MIME = "image/jpeg";
+const COMPRESS_QUALITY = 0.6;
+const MAX_EDGE = 1200;
+
+// ====== 状態管理 ======
+let selectedTable = null; // "A" or "B"
+let selectedGame = null;  // "1", "2", "3", "4"
+
+// ====== DOM要素 ======
+const $ = (id) => document.getElementById(id);
+const logBox = $("log");
+const uploadBtn = $("uploadBtn");
+const fileInput = $("files");
+const fileCount = $("fileCount");
+
+// 初期化
+function init() {
+  $("date").value = todayISO();
+  updateButtonState();
+}
+
+function todayISO() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+// ログ出力（かわいく）
+function log(msg, type = "info") {
+  // 初回クリア
+  if (logBox.innerText.includes("進捗が表示されます")) {
+    logBox.innerHTML = "";
   }
 
-  const formData = new FormData();
-  formData.append("file", file);
+  const div = document.createElement("div");
+  div.className = "log-item " + (type === "ok" ? "log-ok" : type === "ng" ? "log-ng" : type === "warn" ? "log-warn" : "log-info");
+  
+  let icon = "info";
+  if (type === "ok") icon = "check_circle";
+  if (type === "ng") icon = "error";
+  if (type === "warn") icon = "help";
+  if (msg.includes("魔法")) icon = "auto_fix_high";
+  if (msg.includes("月")) icon = "rocket_launch";
 
-const res = await fetch("https://script.google.com/macros/s/AKfycbxUhtgWdbGpE6jCjv4hQ8Iw-f0xnHkw-jeEyBFLds6MryJc1MrIHG7IPvTI4rialzJHXA/exec", {
-  method: "POST",
-  body: formData
+  div.innerHTML = `<span class="material-icons-round" style="font-size:16px;">${icon}</span> <span>${msg}</span>`;
+  
+  logBox.appendChild(div);
+  logBox.scrollTop = logBox.scrollHeight;
+}
+
+
+fileInput.addEventListener('change', () => {
+  const num = fileInput.files.length;
+  if (num > 0) {
+    fileCount.innerHTML = `<span class="material-icons-round" style="vertical-align:text-bottom;">check</span> ${num}枚 選択中`;
+  } else {
+    fileCount.textContent = "";
+  }
+  updateButtonState();
+});
+
+function updateButtonState() {
+  const hasFiles = fileInput.files.length > 0;
+
+  if (hasFiles) {
+    uploadBtn.disabled = false;
+    uploadBtn.textContent = `アップロード！`;
+  } else {
+    uploadBtn.disabled = true;
+    uploadBtn.textContent = `画像を選んでね`;
+  }
+}
+
+function resetSelection() {
+  fileInput.value = "";
+  fileCount.textContent = "";
+  updateButtonState();
+}
+
+
+
+// ====== 通信・変換処理 ======
+
+async function postJSON(payload) {
+  const res = await fetch(GAS_EXEC_URL, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  const text = await res.text();
+  try { return JSON.parse(text); } 
+  catch { throw new Error("JSONじゃない応答: " + text.slice(0, 200)); }
+}
+
+
+async function uploadOne(data) {
+  const payload = { ...data, action: "upload", mimeType: COMPRESS_MIME };
+  const out = await postJSON(payload);
+  if (!out.ok) throw new Error(out.error || "upload failed");
+  return out;
+}
+
+async function fileToCompressedBlob(file) {
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.decoding = "async";
+  img.src = url;
+  await img.decode();
+
+  const { width, height } = img;
+  
+  // サイズ調整
+  const scale = Math.min(1, MAX_EDGE / Math.max(width, height));
+  const w = Math.round(width * scale);
+  const h = Math.round(height * scale);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  
+  const ctx = canvas.getContext("2d", { alpha: false });
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, w, h);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(img, 0, 0, w, h);
+
+  URL.revokeObjectURL(url);
+
+  return await new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if(blob) resolve(blob);
+        else reject(new Error("画像変換エラー"));
+      },
+      COMPRESS_MIME,
+      COMPRESS_QUALITY
+    );
+  });
+}
+
+async function blobToBase64(blob) {
+  return await new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onerror = reject;
+    r.onload = () => resolve(String(r.result).split(",")[1]);
+    r.readAsDataURL(blob);
+  });
+}
+
+
+uploadBtn.addEventListener("click", async () => {
+  const date = todayISO();
+  const category = "league";
+
+  const period  = "1";
+  const section = "1";
+  const table   = "A";
+  const game    = "1";
+
+  const files = [...fileInput.files];
+  if (!files.length) return;
+
+
+  try {
+    uploadBtn.disabled = true;
+    uploadBtn.textContent = "アップロード中...";
+
+
+    logBox.innerHTML = "";
+    log(`ひみつきちサーバーに送っています...`);
+
+    const start = 1;
+
+    for (let i = 0; i < files.length; i++) {
+      const seq = start + i;
+      const file = files[i];
+
+      log(`[${i + 1}/${files.length}] 魔法をかけて小さくしています...☀`);
+      const blob = await fileToCompressedBlob(file);
+      const kb = Math.round(blob.size / 1024);
+
+      log(`[${i + 1}/${files.length}] ひみつきちに届けています！ (${kb}KB)`);
+      const b64 = await blobToBase64(blob);
+
+      const out = await uploadOne({
+        date, category, period, section, table, game, seq, base64: b64
+      });
+
+      log(`完了！ ${out.name}`, "ok");
+    }
+
+    log(`ぜんぶ届きました！ありがとうございます`, "ok");
+    alert("アップロード完了！\n選択をリセットします。");
+
+    resetSelection();
+
+  } catch (e) {
+    console.error(e);
+    log("エラーが発生しました: " + (e?.message || String(e)), "ng");
+    uploadBtn.disabled = false;
+    updateButtonState();
+  }
 });
 
 
-  const text = await res.text();
-  document.getElementById("result").innerText = text;
-}
+init();
+
 </script>
+</body>
+</html>
 
